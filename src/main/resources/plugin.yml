@@ -1,5 +1,5 @@
 name: WINAKPlugin
-description: $description
+description: Een plugin voor de WINAK Minecraft server.
 prefix: WINAK
 version: '${version}'
 
@@ -9,3 +9,14 @@ load: POSTWORLD
 
 authors: [ Kyan Van den Eynde ]
 website: https://winak.be/
+
+commands:
+  pee:
+    description: Start or stop peeing.
+    usage: /<command>
+    permission: winak.pee
+
+permissions:
+  winak.pee:
+    description: Allows using /pee.
+    default: true

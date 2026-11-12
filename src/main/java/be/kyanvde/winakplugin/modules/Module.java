@@ -5,12 +5,20 @@ import lombok.Getter;
 import org.bukkit.Bukkit;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.PluginCommand;
+import org.bukkit.event.HandlerList;
 import org.bukkit.event.Listener;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
- * An interface for WINAK Plugin modules.
+ * A self-contained feature of the WINAK plugin with its own commands and listeners.
+ *
+ * <p>Subclasses declare their commands and listeners in {@link #addCommands()} and
+ * {@link #addListeners()}; this class registers them on {@link #enable()} and
+ * unregisters them again on {@link #disable()}.
  */
 public abstract class Module {
 
@@ -21,22 +29,19 @@ public abstract class Module {
     private final String name;
 
     /**
-     * A list of modules this module depends on.
+     * The modules this module depends on. They are enabled before this one.
      */
     @Getter
-    private final List<Module> dependencies = new ArrayList<>();
+    private final List<Module> dependencies;
 
     /**
-     * A list of all listeners that belong to this module.
+     * Whether the module is currently enabled.
      */
     @Getter
+    private boolean enabled;
+
     private final List<Listener> listeners = new ArrayList<>();
-
-    /**
-     * A map of all commands that belong to this module.
-     */
-    @Getter
-    private final Map<PluginCommand, CommandExecutor> commands = new HashMap<>();
+    private final Map<String, CommandExecutor> commands = new HashMap<>();
 
     /**
      * Initializes a new module.
@@ -45,42 +50,92 @@ public abstract class Module {
      */
     protected Module(String name, Module... dependencies) {
         this.name = name;
-        this.dependencies.addAll(Arrays.asList(dependencies));
-
-        registerCommands();
-        registerListeners();
+        this.dependencies = List.of(dependencies);
     }
 
-    public void enable() {
+    /**
+     * Enables this module (and its dependencies), registering all of its commands and listeners.
+     */
+    public final void enable() {
+        if (enabled) {
+            return;
+        }
+        dependencies.forEach(Module::enable);
 
+        WINAKPlugin plugin = WINAKPlugin.getInstance();
+        addCommands();
+        addListeners();
+
+        commands.forEach((label, executor) -> getCommand(label).setExecutor(executor));
+        listeners.forEach(listener -> Bukkit.getPluginManager().registerEvents(listener, plugin));
+
+        onEnable();
+        enabled = true;
+        plugin.getLogger().info("Enabled module " + name + ".");
     }
 
-    public void disable() {
+    /**
+     * Disables this module, unregistering all of its commands and listeners.
+     */
+    public final void disable() {
+        if (!enabled) {
+            return;
+        }
+        onDisable();
 
+        listeners.forEach(HandlerList::unregisterAll);
+        commands.keySet().forEach(label -> getCommand(label).setExecutor(null));
+        listeners.clear();
+        commands.clear();
+
+        enabled = false;
+        WINAKPlugin.getInstance().getLogger().info("Disabled module " + name + ".");
     }
 
+    /**
+     * Called after the commands and listeners are registered.
+     */
+    protected void onEnable() {
+    }
+
+    /**
+     * Called before the commands and listeners are unregistered.
+     */
+    protected void onDisable() {
+    }
+
+    /**
+     * Declares the commands of this module using {@link #addCommand(String, CommandExecutor)}.
+     */
     protected abstract void addCommands();
 
-    protected void addCommand(String command, CommandExecutor executor) {
-        this.commands.put(WINAKPlugin.getInstance().getCommand(command), executor);
+    /**
+     * Binds a command to an executor.
+     * @param label The command's name, as declared in {@code plugin.yml}.
+     * @param executor The executor that handles the command.
+     */
+    protected void addCommand(String label, CommandExecutor executor) {
+        commands.put(label, executor);
     }
 
+    /**
+     * Declares the listeners of this module using {@link #addListener(Listener)}.
+     */
     protected abstract void addListeners();
 
+    /**
+     * Adds an event listener to this module.
+     * @param listener The listener to register.
+     */
     protected void addListener(Listener listener) {
-        this.listeners.add(listener);
+        listeners.add(listener);
     }
 
-
-
-    private void registerCommands() {
-        for (Map.Entry<PluginCommand, CommandExecutor> command : commands.entrySet())
-            command.getKey().setExecutor(command.getValue());
-    }
-
-    private void registerListeners() {
-        for (Listener listener : this.listeners) {
-            Bukkit.getPluginManager().registerEvents(listener, WINAKPlugin.getInstance());
+    private static PluginCommand getCommand(String label) {
+        PluginCommand command = WINAKPlugin.getInstance().getCommand(label);
+        if (command == null) {
+            throw new IllegalStateException("Command /" + label + " is not declared in plugin.yml.");
         }
+        return command;
     }
 }
