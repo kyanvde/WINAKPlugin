@@ -1,0 +1,11 @@
+name: WINAKPlugin
+description: $description
+prefix: WINAK
+version: '${version}'
+
+main: be.kyanvde.winakplugin.WINAKPlugin
+api-version: '26.3'
+load: POSTWORLD
+
+authors: [ Kyan Van den Eynde ]
+website: https://winak.be/
